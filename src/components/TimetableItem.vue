@@ -2,11 +2,18 @@
 defineProps({
   stop: Object,
 });
+
+defineEmits(["removeStop"]);
 </script>
 
 <template>
   <div class="wrapper">
-    <p>{{ stop.nm }} ({{ stop.nr }})</p>
+    <div class="header">
+      <p>
+        <span class="stop-name">{{ stop.nm }}</span> ({{ stop.nr }})
+      </p>
+      <i class="ph-x" @click="$emit('removeStop', stop.nr)"></i>
+    </div>
     <table>
       <thead>
         <th>Linia</th>
@@ -31,8 +38,38 @@ defineProps({
   border-radius: 0.375rem;
   margin: 0.5rem;
 
-  th {
-    color: hsla(160, 100%, 37%, 1);
+  .header {
+    display: grid;
+    grid-template-columns: auto 2fr;
+    align-items: center;
+
+    .stop-name {
+      text-transform: uppercase;
+      font-weight: bold;
+      color: hsla(160, 100%, 37%, 1);
+    }
+
+    i {
+      justify-self: flex-end;
+      font-size: 1.5rem;
+      color: red;
+    }
+  }
+
+  table {
+    width: 100%;
+
+    th {
+      background-color: var(--color-background-mute);
+      color: var(--color-heading);
+      text-align: left;
+      font-weight: 900;
+    }
+    th,
+    td {
+      border: 2px solid var(--color-border);
+      padding: 0.375rem;
+    }
   }
 }
 </style>
