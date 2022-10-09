@@ -134,13 +134,17 @@ const trackedBusEta = computed(() => {
 
   const departure = line.de;
 
-  const hours = parseInt(departure.split(":")[0]);
-  const minutes = parseInt(departure.split(":")[1]);
+  if (departure.includes(":")) {
+    const hours = parseInt(departure.split(":")[0]);
+    const minutes = parseInt(departure.split(":")[1]);
 
-  const now = new Date();
-  const departureTime = new Date().setHours(hours, minutes);
+    const now = new Date();
+    const departureTime = new Date().setHours(hours, minutes);
 
-  return getMinDiff(departureTime, now);
+    return getMinDiff(departureTime, now);
+  } else {
+    return departure.split("min")[0];
+  }
 });
 
 const showNotification = (title) => {
