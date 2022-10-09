@@ -1,9 +1,9 @@
 <script setup>
-import { onMounted, reactive, watch } from "vue";
+import { onMounted, reactive, watch, computed } from "vue";
 import TimetableItem from "./components/TimetableItem.vue";
 import CustomLoader from "@/components/CustomLoader.vue";
 import axios from "axios";
-import { useDebounceFn } from "@vueuse/core";
+import { useDebounceFn, useWebNotification } from "@vueuse/core";
 
 const state = reactive({
   stops: [],
@@ -12,15 +12,26 @@ const state = reactive({
   timerId: null,
   loading: true,
   q: "",
+  trackedStopNum: null,
 });
+
+const getStops = async () => {
+  try {
+    const response = await axios.get(
+      "https://dripsiaga.pl/timetable-api/stops"
+    );
+    return response.data;
+  } catch (error) {
+    state.loading = false;
+    throw error;
+  }
+};
 
 const findStops = async (e) => {
   const q = e.target.value;
   if (q) {
-    const response = await axios.get(
-      "http://127.0.0.1:8000/timetable-api/stops"
-    );
-    state.foundStops = response.data.st.filter((stop) => {
+    const data = await getStops();
+    state.foundStops = data.st.filter((stop) => {
       return (
         stop.nm.toLowerCase().includes(q.toLowerCase()) ||
         stop.nr.toString().includes(q)
@@ -50,17 +61,15 @@ const saveStops = (stops) => {
 
 const refreshStops = async () => {
   if (state.stops) {
-    const response = await axios.get(
-      "http://127.0.0.1:8000/timetable-api/stops"
-    );
+    const data = await getStops();
     const stopNrs = Array.from(state.stops, (stop) => stop.nr);
     stopNrs.forEach((nr) => {
       const currentStop = state.stops.find((stop) => checkStop(stop, nr));
       if (currentStop) {
         const currentStopIndex = state.stops.indexOf(currentStop);
-        const newStop = response.data.st.find((stop) => checkStop(stop, nr));
+        const newStop = data.st.find((stop) => checkStop(stop, nr));
         state.stops[currentStopIndex] = newStop;
-        state.ct = response.data.ct;
+        state.ct = data.ct;
       }
     });
   } else {
@@ -95,18 +104,74 @@ onMounted(async () => {
   let stops = localStorage.getItem("stops");
   if (stops) {
     stops = JSON.parse(stops);
-    const response = await axios.get(
-      "http://127.0.0.1:8000/timetable-api/stops"
-    );
+    const data = await getStops();
     stops.forEach((stopNr) => {
       if (!state.stops.find((stop) => checkStop(stop, stopNr))) {
-        state.stops.push(
-          response.data.st.find((stop) => checkStop(stop, stopNr))
-        );
+        state.stops.push(data.st.find((stop) => checkStop(stop, stopNr)));
       }
     });
-    state.ct = response.data.ct;
+    state.ct = data.ct;
     state.loading = false;
+  }
+});
+
+const getMinDiff = (startDate, endDate) => {
+  const msInMinute = 60 * 1000;
+
+  return Math.round(Math.abs(endDate - startDate) / msInMinute);
+};
+
+const trackedBusEta = computed(() => {
+  if (!state.stops || !state.trackedStopNum) return null;
+
+  const stop = state.stops.find((stop) =>
+    checkStop(stop, state.trackedStopNum)
+  );
+
+  const trackedBus = stop.sd;
+
+  const line = trackedBus[state.trackedBusIndex];
+
+  const departure = line.de;
+
+  const hours = parseInt(departure.split(":")[0]);
+  const minutes = parseInt(departure.split(":")[1]);
+
+  const now = new Date();
+  const departureTime = new Date().setHours(hours, minutes);
+
+  return getMinDiff(departureTime, now);
+});
+
+const showNotification = (title) => {
+  const {
+    isSupported,
+    // notification,
+    show,
+    // close,
+    // onClick,
+    // onShow,
+    // onError,
+    // onClose,
+  } = useWebNotification({
+    title,
+    dir: "auto",
+    lang: "en",
+    renotify: true,
+    tag: "eta_alert",
+  });
+
+  if (isSupported.value) show();
+};
+
+watch(trackedBusEta, (newValue) => {
+  if (newValue) {
+    if (
+      (newValue < 30 && newValue % 10 === 0) ||
+      (newValue <= 15 && newValue % 5 === 0)
+    ) {
+      showNotification(`ETA: ${newValue} MIN`);
+    }
   }
 });
 </script>
@@ -135,6 +200,10 @@ onMounted(async () => {
       </ol>
     </div>
     <p class="ct" v-if="state.stops.length">{{ state.ct }}</p>
+    <p class="eta" v-if="trackedBusEta">
+      ETA:&nbsp;<span>{{ trackedBusEta }}</span
+      >&nbsp;MIN
+    </p>
   </header>
 
   <CustomLoader v-if="state.loading" />
@@ -144,6 +213,8 @@ onMounted(async () => {
       v-for="stop in state.stops"
       :key="stop.nr"
       :stop="stop"
+      v-model:trackedStopNum="state.trackedStopNum"
+      v-model:trackedBusIndex="state.trackedBusIndex"
       @remove-stop="removeStop"
     />
   </main>
@@ -156,6 +227,21 @@ onMounted(async () => {
   justify-content: center;
   font-family: "Orbitron", sans-serif;
   color: hsla(160, 100%, 37%, 1);
+}
+
+.eta span {
+  font-family: "Orbitron", sans-serif;
+}
+
+.eta {
+  font-size: 2.75rem;
+  display: flex;
+  justify-content: center;
+  color: hsla(160, 100%, 37%, 1);
+}
+
+.search-wrapper {
+  max-width: 300px;
 }
 .search-stops {
   outline: none;
@@ -191,12 +277,9 @@ onMounted(async () => {
 
 header {
   line-height: 1.5;
-}
-
-@media (min-width: 1024px) {
-  header {
-    display: flex;
-    place-items: center;
-  }
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  place-items: center;
 }
 </style>
