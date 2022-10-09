@@ -1,9 +1,31 @@
 <script setup>
-defineProps({
+import { computed } from "vue";
+
+const props = defineProps({
   stop: Object,
+  trackedStopNum: String,
+  trackedBusIndex: Number,
 });
 
-defineEmits(["removeStop"]);
+const emit = defineEmits([
+  "removeStop",
+  "update:trackedStopNum",
+  "update:trackedBusIndex",
+]);
+
+const isCurrentlyTracked = computed(() => {
+  return props.trackedStopNum === props.stop.nr;
+});
+
+const updateTracking = (index) => {
+  if (isCurrentlyTracked.value && props.trackedBusIndex === index) {
+    emit("update:trackedStopNum", null);
+    emit("update:trackedBusIndex", null);
+  } else {
+    emit("update:trackedStopNum", props.stop.nr);
+    emit("update:trackedBusIndex", index);
+  }
+};
 </script>
 
 <template>
@@ -21,7 +43,14 @@ defineEmits(["removeStop"]);
         <th>Odjazd</th>
       </thead>
       <tbody>
-        <tr v-for="line in stop.sd" :key="line.li">
+        <tr
+          v-for="(line, index) in stop.sd"
+          :key="line.li"
+          :class="{
+            tracked: isCurrentlyTracked && index === trackedBusIndex,
+          }"
+          @click="updateTracking(index)"
+        >
           <td>{{ line.li }}</td>
           <td>{{ line.di }}</td>
           <td>{{ line.de }}</td>
@@ -65,10 +94,15 @@ defineEmits(["removeStop"]);
       text-align: left;
       font-weight: 900;
     }
+
     th,
     td {
       border: 2px solid var(--color-border);
       padding: 0.375rem;
+    }
+
+    tr.tracked td {
+      color: hsla(160, 100%, 37%, 1);
     }
   }
 }
