@@ -6,9 +6,12 @@ module.exports = {
   extends: [
     "plugin:vue/vue3-essential",
     "eslint:recommended",
-    "@vue/eslint-config-prettier",
+    "@vue/eslint-config-typescript",
   ],
   parserOptions: {
     ecmaVersion: "latest",
+  },
+  rules: {
+    "linebreak-style": ["error", (process.platform === "win32" ? "windows" : "unix")],
   },
 };
