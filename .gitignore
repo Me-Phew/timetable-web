@@ -1,3 +1,7 @@
+# Vite PWA
+/dev-dist
+registerSW.js
+
 # Logs
 logs
 *.log
