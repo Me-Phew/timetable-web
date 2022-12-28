@@ -43,14 +43,9 @@ const updateTracking = (index) => {
         <th>Odjazd</th>
       </thead>
       <tbody>
-        <tr
-          v-for="(line, index) in stop.sd"
-          :key="line.li"
-          :class="{
-            tracked: isCurrentlyTracked && index === trackedBusIndex,
-          }"
-          @click="updateTracking(index)"
-        >
+        <tr v-for="(line, index) in stop.sd" :key="line.li"
+          :class="{ tracked: isCurrentlyTracked && index === trackedBusIndex }"
+          @click="updateTracking(index)">
           <td>{{ line.li }}</td>
           <td>{{ line.di }}</td>
           <td>{{ line.de }}</td>
@@ -82,6 +77,7 @@ const updateTracking = (index) => {
       justify-self: flex-end;
       font-size: 1.5rem;
       color: red;
+      cursor: pointer;
     }
   }
 
