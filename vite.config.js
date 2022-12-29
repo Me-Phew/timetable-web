@@ -9,8 +9,9 @@ export default defineConfig({
   plugins: [
     vue(),
     VitePWA({
+      injectRegister: null,
       strategies: 'injectManifest',
-      filename: 'timetable-sw.js',
+      filename: 'firebase-messaging-sw.js',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
       manifest: {
         name: 'Rozkład jazdy',
