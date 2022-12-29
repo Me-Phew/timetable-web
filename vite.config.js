@@ -14,7 +14,7 @@ export default defineConfig({
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
       manifest: {
         name: 'Rozkład jazdy',
-        short_name: 'BusesTimetable',
+        short_name: 'Rozkład jazdy',
         description: 'Nieoficjalna aplikacja do śledzenia czasu odjazdu autobusów MPK Nowy Sącz',
         theme_color: '#ffffff',
         icons: [
