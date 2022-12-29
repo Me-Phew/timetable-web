@@ -46,9 +46,12 @@ const updateTracking = (index) => {
         <tr v-for="(line, index) in stop.sd" :key="line.li"
           :class="{ tracked: isCurrentlyTracked && index === trackedBusIndex }"
           @click="updateTracking(index)">
-          <td>{{ line.li }}</td>
-          <td>{{ line.di }}</td>
-          <td>{{ line.de }}</td>
+          <td class="line">{{ line.li }}</td>
+          <td class="destination">{{ line.di }}</td>
+          <td class="departure" v-if="line.de" :class="{ 'move-animation': line.de === '>>' }">
+            <span>{{ line.de }}</span>
+          </td>
+          <td v-else>-</td>
         </tr>
       </tbody>
     </table>
@@ -97,9 +100,38 @@ const updateTracking = (index) => {
       padding: 0.375rem;
     }
 
+    tr {
+      cursor: pointer;
+    }
+
     tr.tracked td {
       color: hsla(160, 100%, 37%, 1);
     }
+  }
+
+  @keyframes move-animation {
+    0% {
+      transform: translateX(-25%);
+    }
+
+    50% {
+      transform: translateX(25%);
+    }
+
+    100% {
+      transform: translateX(-25%);
+    }
+  }
+
+  .line,
+  .departure {
+    text-align: center;
+  }
+
+  .departure.move-animation span {
+    display: inline-block;
+    width: 100%;
+    animation: move-animation 2s infinite;
   }
 }
 </style>
