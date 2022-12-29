@@ -4,6 +4,8 @@ import TimetableItem from "./components/TimetableItem.vue";
 import CustomLoader from "@/components/CustomLoader.vue";
 import axios from "axios";
 import { useDebounceFn, useThrottleFn, useWebNotification, usePermission } from "@vueuse/core";
+import { getToken, onMessage } from "firebase/messaging";
+import messaging from '@/firebase.js';
 
 const state = reactive({
   stops: [],
@@ -15,7 +17,9 @@ const state = reactive({
   q: "",
   trackedStopNum: null,
   showNotificationMessage: false,
-  serviceWorkerReady: false,
+  notificationsState: null,
+  serviceWorkerSupported: null,
+  pushMessagingSupported: null,
 });
 
 const getStops = async () => {
@@ -80,15 +84,6 @@ const refreshStops = async () => {
     clearInterval(state.timerId);
   }
 
-  if (state.serviceWorkerReady) {
-    console.log('Sending STOPS_SYNC event: ', JSON.parse(JSON.stringify(state.stops)));
-    navigator.serviceWorker.controller.postMessage({
-      type: 'STOPS_SYNC',
-      stops: JSON.parse(JSON.stringify(state.stops)),
-    });
-  } else {
-    console.log('Skipping STOPS_SYNC event: servie worker is not ready yet');
-  }
   state.refreshing = false;
 };
 
@@ -118,17 +113,10 @@ const removeStop = (nr) => {
 };
 
 onMounted(async () => {
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.ready.then(() => {
-      state.serviceWorkerReady = true;
-    });
-    console.log('SYNC events enabled: service worker is ready');
-  } else {
-    console.log('Disabling all SYNC events: service worker is not supported in this browser');
-    state.serviceWorkerUnsupported
-  }
-
+  state.serviceWorkerSupported = 'serviceWorker' in navigator;
+  state.pushMessagingSupported = ('PushManager' in window);
   state.showNotificationMessage = JSON.parse(localStorage.getItem('showNotificationMessage'));
+
   let stops = localStorage.getItem("stops");
   if (stops) {
     stops = JSON.parse(stops);
@@ -143,6 +131,28 @@ onMounted(async () => {
     }
   }
   state.loading = false;
+
+  if (import.meta.env.PROD && state.serviceWorkerSupported && state.pushMessagingSupported) {
+    try {
+      const currentToken = await getToken(messaging, { vapidKey: "BIfMAYaSmkalPqzNUQlRRhfIhqryMV79098ZzXjcdFBlAyxa1DSjzzvP_KkdHvf1V20U2DRo7eMQ-C6JmIx5UTg" });
+      if (currentToken) {
+        state.notificationsState = 'success';
+        // Send the token to your server and update the UI if necessary
+        // ...
+
+        onMessage(messaging, (payload) => {
+          console.log('Message received. ', payload);
+          // ...
+        });
+      } else {
+        console.error('An error occurred while retrieving token.', 'The getToken function did not return a token');
+        state.notificationsState = 'error';
+      }
+    } catch (err) {
+      console.error('An error occurred while retrieving token.', err);
+      state.notificationsState = 'error';
+    }
+  }
 });
 
 const getMinDiff = (startDate, endDate) => {
@@ -224,12 +234,12 @@ watch(notificationsPermission, (newValue) => {
     state.showNotificationMessage = true;
     localStorage.setItem('showNotificationMessage', JSON.stringify(state.showNotificationMessage));
   }
-})
+});
 </script>
 
 <template>
   <div class="message-box notifications-enabled"
-    v-if="notificationsPermission === 'granted' && state.showNotificationMessage">
+    v-if="notificationsPermission === 'granted' && state.showNotificationMessage && state.notificationsState === 'success'">
     <i class="ph-x" @click="hideNotificationsMessage"></i>
     <p>Powiadomienia włączone</p>
     <i class="ph-bell-simple-ringing-fill"></i>
@@ -237,6 +247,21 @@ watch(notificationsPermission, (newValue) => {
   <div class="message-box notifications-disabled" v-else-if="notificationsPermission != 'granted'">
     <i class="ph-bell-simple-slash-fill"></i>
     <p>Powiadomienia wyłączone</p>
+    <i class="ph-warning-octagon-fill"></i>
+  </div>
+  <div class="message-box notifications-error" v-else-if="state.notificationsState === 'error'">
+    <i class="ph-bell-simple-slash-fill"></i>
+    <p>Powiadomienia wyłączone - wystąpił błąd</p>
+    <i class="ph-warning-octagon-fill"></i>
+  </div>
+  <div class="message-box notifications-error" v-else-if="!state.serviceWorkerSupported">
+    <i class="ph-bell-simple-slash-fill"></i>
+    <p>Powiadomienia wyłączone - service worker nie jest obsługiwany w tej przeglądarce</p>
+    <i class="ph-warning-octagon-fill"></i>
+  </div>
+  <div class="message-box notifications-error" v-else-if="!state.pushMessagingSupported">
+    <i class="ph-bell-simple-slash-fill"></i>
+    <p>Powiadomienia wyłączone - Powiadomienia push nie są obsługiwane w tej przeglądarce</p>
     <i class="ph-warning-octagon-fill"></i>
   </div>
   <header>
@@ -267,9 +292,9 @@ watch(notificationsPermission, (newValue) => {
       <i class="ph-placeholder-light"></i>
       <p>Brak przystanków</p>
     </div>
-    <TimetableItem v-for="stop in state.stops" :key="stop.nr" :stop="stop"
-      v-model:trackedStopNum="state.trackedStopNum" v-model:trackedBusIndex="state.trackedBusIndex"
-      @remove-stop="removeStop" />
+    <TimetableItem v-for="stop in state.stops" :key="stop.nr" :stop="stop" @remove-stop="removeStop"
+      v-model:trackedStopNum="state.trackedStopNum"
+      v-model:trackedBusIndex="state.trackedBusIndex" />
   </main>
 </template>
 
@@ -300,7 +325,8 @@ watch(notificationsPermission, (newValue) => {
 
 }
 
-.notifications-disabled {
+.notifications-disabled,
+.notifications-error {
   background-color: #46212A;
   color: #D03A52;
 }
