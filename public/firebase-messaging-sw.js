@@ -9,9 +9,6 @@ precacheAndRoute(self.__WB_MANIFEST);
 self.skipWaiting();
 clientsClaim();
 
-// Initialize the Firebase app in the service worker by passing in
-// your app's Firebase config object.
-// https://firebase.google.com/docs/web/setup#config-object
 const firebaseConfig = {
   apiKey: "AIzaSyAy8D6SsmNjI7nDQDToL3ULd84cX_csBCw",
   authDomain: "timetable-ff754.firebaseapp.com",
@@ -23,20 +20,61 @@ const firebaseConfig = {
 };
 
 const firebaseApp = initializeApp(firebaseConfig);
-
-// Retrieve an instance of Firebase Messaging so that it can handle background
-// messages.
 const messaging = getMessaging(firebaseApp);
 
 onBackgroundMessage(messaging, (payload) => {
   console.log('[firebase-messaging-sw.js] Received background message ', payload);
-  // Customize notification here
-  const notificationTitle = 'Background Message Title';
+
+  const { eta, bus, stop } = payload.data;
+
+  const notificationTitle = eta == '0' ? 'Bus is leaving NOW' : `ETA: ${eta} minutes`;
+  const notificationBody = `Tracking bus #${bus} from stop #${stop}`;
+
   const notificationOptions = {
-    body: 'Background Message body.',
-    icon: '/firebase-logo.png'
+    body: notificationBody,
+    badge: '/android-chrome-192x192.png',
+    icon: '/bus-white.png',
+    dir: "auto",
+    lang: "en",
+    renotify: true,
+    tag: "eta_alert",
   };
 
-  self.registration.showNotification(notificationTitle,
-    notificationOptions);
+  self.registration.showNotification(
+    notificationTitle,
+    notificationOptions,
+  );
+});
+
+self.addEventListener('notificationclick', function (event) {
+  const clickedNotification = event.notification;
+  clickedNotification.close();
+  console.log(event);
+
+
+  const urlToOpen = new URL('/timetable', self.location.origin).href;
+
+  const promiseChain = clients.matchAll({
+    type: 'window',
+    includeUncontrolled: true
+  })
+    .then((windowClients) => {
+      let matchingClient = null;
+
+      for (let i = 0; i < windowClients.length; i++) {
+        const windowClient = windowClients[i];
+        if (windowClient.url === urlToOpen) {
+          matchingClient = windowClient;
+          break;
+        }
+      }
+
+      if (matchingClient) {
+        return matchingClient.focus();
+      } else {
+        return clients.openWindow(urlToOpen);
+      }
+    });
+
+  event.waitUntil(promiseChain);
 });

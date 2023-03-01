@@ -3,7 +3,7 @@ import { onMounted, reactive, watch, computed } from "vue";
 import TimetableItem from "./components/TimetableItem.vue";
 import CustomLoader from "@/components/CustomLoader.vue";
 import axios from "axios";
-import { useDebounceFn, useThrottleFn, useWebNotification, usePermission } from "@vueuse/core";
+import { useDebounceFn, useThrottleFn, usePermission } from "@vueuse/core";
 import { getToken, onMessage } from "firebase/messaging";
 import messaging from '@/firebase.js';
 
@@ -16,21 +16,25 @@ const state = reactive({
   refreshing: false,
   q: "",
   trackedStopNum: null,
+  trackedBusNum: null,
   showNotificationMessage: false,
   notificationsState: null,
   serviceWorkerSupported: null,
   pushMessagingSupported: null,
+  fetchError: false,
+  fcmToken: null,
+  notificationsStatus: null,
 });
 
 const getStops = async () => {
   try {
     const response = await axios.get(
-      "https://dripsiaga.pl/timetable-api/stops"
+      `${import.meta.env.VITE_API_URL}stops`
     );
     return response.data;
   } catch (error) {
     state.loading = false;
-    throw error;
+    state.fetchError = true;
   }
 };
 
@@ -40,8 +44,8 @@ const findStops = async (e) => {
     const data = await getStops();
     state.foundStops = data.st.filter((stop) => {
       return (
-        stop.nm.toLowerCase().includes(q.toLowerCase()) ||
-        stop.nr.toString().includes(q)
+        stop && (stop.nm.toLowerCase().includes(q.toLowerCase()) ||
+          stop.nr.toString().includes(q))
       );
     }, 200);
   } else {
@@ -52,7 +56,7 @@ const findStops = async (e) => {
 const findStopsDebounce = useDebounceFn((e) => findStops(e));
 
 const checkStop = (stop, nr) => {
-  return stop.nr === nr;
+  return stop && (parseInt(stop.nr) === parseInt(nr));
 };
 
 const saveStops = (stops) => {
@@ -112,38 +116,69 @@ const removeStop = (nr) => {
   }
 };
 
-onMounted(async () => {
-  state.serviceWorkerSupported = 'serviceWorker' in navigator;
-  state.pushMessagingSupported = ('PushManager' in window);
-  state.showNotificationMessage = JSON.parse(localStorage.getItem('showNotificationMessage'));
+const loadStops = async () => {
+  state.refreshing = true;
 
   let stops = localStorage.getItem("stops");
   if (stops) {
     stops = JSON.parse(stops);
     if (stops.length) {
       const data = await getStops();
-      stops.forEach((stopNr) => {
-        if (!state.stops.find((stop) => checkStop(stop, stopNr))) {
-          state.stops.push(data.st.find((stop) => checkStop(stop, stopNr)));
-        }
-      });
-      state.ct = data.ct;
+      if (data && data.ct && data.st.length) {
+        stops.forEach((stopNr) => {
+          if (!state.stops.find((stop) => checkStop(stop, stopNr))) {
+            state.stops.push(data.st.find((stop) => checkStop(stop, stopNr)));
+          }
+        });
+        state.ct = data.ct;
+        state.fetchError = false;
+      }
     }
   }
   state.loading = false;
+  state.refreshing = false;
+}
+
+const loadStopsThrottled = useThrottleFn(loadStops, 2000);
+
+const loadActiveTrackingSession = async (fcmToken) => {
+  try {
+    const response = await axios.get(
+      `${import.meta.env.VITE_API_URL}tracking-service/active-session/${fcmToken}`,
+    );
+
+    const { data } = response;
+
+    state.trackedStopNum = parseInt(data.stop_number);
+    state.trackedBusNum = parseInt(data.bus_number);
+
+  } catch (error) {
+    if (!(error.response && error.response.status === 404 && error.response.data && error.response.data.detail === "Did not find an active tracking session associated to provided token")) {
+      throw error;
+    }
+  }
+}
+
+
+onMounted(async () => {
+  state.serviceWorkerSupported = 'serviceWorker' in navigator;
+  state.pushMessagingSupported = 'PushManager' in window;
+  state.showNotificationMessage = JSON.parse(localStorage.getItem('showNotificationMessage'));
+
+  await loadStops();
 
   if (import.meta.env.PROD && state.serviceWorkerSupported && state.pushMessagingSupported) {
     try {
       const currentToken = await getToken(messaging, { vapidKey: "BIfMAYaSmkalPqzNUQlRRhfIhqryMV79098ZzXjcdFBlAyxa1DSjzzvP_KkdHvf1V20U2DRo7eMQ-C6JmIx5UTg" });
       if (currentToken) {
         state.notificationsState = 'success';
-        // Send the token to your server and update the UI if necessary
-        // ...
+        state.fcmToken = currentToken;
 
-        onMessage(messaging, (payload) => {
-          console.log('Message received. ', payload);
-          // ...
+        onMessage(messaging, () => {
+          refreshStops();
         });
+
+        await loadActiveTrackingSession(currentToken);
       } else {
         console.error('An error occurred while retrieving token.', 'The getToken function did not return a token');
         state.notificationsState = 'error';
@@ -153,6 +188,8 @@ onMounted(async () => {
       state.notificationsState = 'error';
     }
   }
+  loadActiveTrackingSession('e6tH1ClwITmCIJ3ftzq3dF:APA91bFEX8T_bIPgxZxtFuYVAwHc97AELrxBp5BKN2aOPRge9b6RXpsuzbIUL2YjoiFRVAUCAzSHYu_uUCn_NqBnnlQQ4EdLKDZuwh7suolgda7I0x5G42ZuvD1mpBGKsJ7Yg1R44ElO');
+
 });
 
 const getMinDiff = (startDate, endDate) => {
@@ -168,9 +205,16 @@ const trackedBusEta = computed(() => {
     checkStop(stop, state.trackedStopNum)
   );
 
-  const trackedBus = stop.sd;
+  if (!stop) return null;
 
-  const line = trackedBus[state.trackedBusIndex];
+
+  const trackedStopBuses = stop.sd;
+
+  const line = trackedStopBuses.find((bus) => {
+    return parseInt(bus.li) === state.trackedBusNum;
+  });
+
+  if (!line) return null;
 
   const departure = line.de;
 
@@ -183,39 +227,14 @@ const trackedBusEta = computed(() => {
 
     return getMinDiff(departureTime, now);
   } else {
-    return departure.split("min")[0];
+    return parseInt(departure.split("min")[0]);
   }
 });
 
-const showNotification = (title) => {
-  const {
-    isSupported,
-    // notification,
-    show,
-    // close,
-    // onClick,
-    // onShow,
-    // onError,
-    // onClose,
-  } = useWebNotification({
-    title,
-    dir: "auto",
-    lang: "en",
-    renotify: true,
-    tag: "eta_alert",
-  });
-
-  if (isSupported.value) show();
-};
-
-watch(trackedBusEta, (newValue) => {
-  if (newValue) {
-    if (
-      (newValue < 30 && newValue % 10 === 0) ||
-      (newValue <= 15 && newValue % 5 === 0)
-    ) {
-      showNotification(`ETA: ${newValue} MIN`);
-    }
+watch(trackedBusEta, async (newValue) => {
+  if (!newValue) {
+    state.trackedStopNum = null;
+    state.trackedBusNum = null;
   }
 });
 
@@ -267,7 +286,7 @@ watch(notificationsPermission, (newValue) => {
   <header>
     <div class="search-wrapper">
       <input type="search" v-model="state.q" @input="findStopsDebounce" @keyup.enter="findStops"
-        class="search-stops" placeholder="Nazwa przystanku" />
+        class="search-stops" placeholder="Nazwa przystanku" :disabled="state.fetchError" />
       <ol v-if="state.foundStops.length" class="search-results">
         <li v-for="stop in state.foundStops" :key="stop.nr" @click="addStop(stop.nr)"
           :class="state.stops.find((s) => checkStop(s, stop.nr)) ? 'added' : 'not-added'">
@@ -280,25 +299,46 @@ watch(notificationsPermission, (newValue) => {
       <i class="ph-arrow-clockwise-light" @click="refreshStopsThrottled"
         :class="state.refreshing ? 'refreshing' : ''"></i>
     </p>
-    <p class="eta" v-if="trackedBusEta">
-      ETA:&nbsp;<span>{{ trackedBusEta }}</span>&nbsp;MIN
-    </p>
+    <div class="eta-wrapper">
+      <p class="eta" v-if="trackedBusEta">
+        ETA:&nbsp;<span :class="{ 'move-animation': trackedBusEta === '>>' }">{{
+          trackedBusEta
+        }}</span>&nbsp;<span v-if="trackedBusEta !== '>>'">MIN</span>
+      </p>
+      <i class="ph-bell-ringing-light" v-if="state.notificationsStatus === 'ok'"></i>
+      <i class="ph-bell-slash-light" v-else-if="trackedBusEta"></i>
+    </div>
   </header>
 
   <CustomLoader v-if="state.loading" />
 
   <main>
-    <div class="no-stops" v-if="!state.stops.length && !state.loading">
+    <div class="no-stops" v-if="!state.stops.length && !state.loading && !state.fetchError">
       <i class="ph-placeholder-light"></i>
       <p>Brak przystanków</p>
     </div>
-    <TimetableItem v-for="stop in state.stops" :key="stop.nr" :stop="stop" @remove-stop="removeStop"
-      v-model:trackedStopNum="state.trackedStopNum"
-      v-model:trackedBusIndex="state.trackedBusIndex" />
+    <div class="stops-wrapper" v-if="!state.fetchError">
+      <TimetableItem v-for="stop in state.stops" :key="stop.nr" :stop="stop" @remove-stop="removeStop"
+        v-model:tracked-stop-num="state.trackedStopNum" v-model:tracked-bus-num="state.trackedBusNum"
+        v-model:notifications-status="state.notificationsStatus" :fcm-token="state.fcmToken" />
+    </div>
+    <div v-if="state.fetchError" class="fetch-error">
+      <i class="ph-circle-wavy-warning-light"></i>
+      <p>Wystąpił błąd przy pobieraniu danych</p>
+      <i class="ph-arrow-clockwise-light" @click="loadStopsThrottled"
+        :class="state.refreshing ? 'refreshing' : ''"></i>
+    </div>
   </main>
 </template>
 
 <style lang="scss" scoped>
+.stops-wrapper {
+  @media only screen and (min-width: 1300px) {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
 .message-box {
   display: flex;
   flex-direction: row;
@@ -331,7 +371,8 @@ watch(notificationsPermission, (newValue) => {
   color: #D03A52;
 }
 
-.no-stops {
+.no-stops,
+.fetch-error {
   margin-top: 1rem;
   font-size: 1.5rem;
 
@@ -343,14 +384,19 @@ watch(notificationsPermission, (newValue) => {
   }
 }
 
-.ct {
-  font-size: 2rem;
+.fetch-error {
   display: flex;
-  flex-direction: column;
-  justify-content: center;
   align-items: center;
-  width: 250px;
+  gap: 1rem;
+  color: crimson;
 
+  i {
+    font-size: 2rem;
+  }
+}
+
+.ct,
+.fetch-error {
   span {
     font-size: 2.75rem;
     font-family: "Orbitron", sans-serif;
@@ -376,8 +422,38 @@ watch(notificationsPermission, (newValue) => {
   }
 }
 
+.ct {
+  font-size: 2rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  width: 250px;
+}
+
 .eta span {
   font-family: "Orbitron", sans-serif;
+}
+
+.eta-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  i {
+    font-size: 2rem;
+    background-color: var(--color-background-soft);
+    padding: .5rem;
+    border-radius: .375rem;
+
+    &.ph-bell-ringing-light {
+      color: hsl(160, 100%, 37%);
+    }
+
+    &.ph-bell-slash-light {
+      color: red;
+    }
+  }
 }
 
 .eta {
@@ -385,6 +461,25 @@ watch(notificationsPermission, (newValue) => {
   display: flex;
   justify-content: center;
   color: hsla(160, 100%, 37%, 1);
+
+  @keyframes move-animation {
+    0% {
+      transform: translateX(-25%);
+    }
+
+    50% {
+      transform: translateX(25%);
+    }
+
+    100% {
+      transform: translateX(-25%);
+    }
+  }
+
+  .move-animation {
+    padding: 0 1rem;
+    animation: move-animation 2s infinite;
+  }
 }
 
 .search-wrapper {
@@ -421,6 +516,7 @@ watch(notificationsPermission, (newValue) => {
   li {
     color: var(--color-heading);
     margin-block: 0.2rem;
+    cursor: pointer;
 
     &.added {
       color: hsla(160, 100%, 37%, 1);

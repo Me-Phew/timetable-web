@@ -1,3 +1,5 @@
+.env
+
 # Vite PWA
 /dev-dist
 registerSW.js

@@ -1,29 +1,80 @@
 <script setup>
+import axios from "axios";
 import { computed } from "vue";
 
 const props = defineProps({
   stop: Object,
-  trackedStopNum: String,
-  trackedBusIndex: Number,
+  trackedStopNum: Number,
+  trackedBusNum: Number,
+  fcmToken: String,
 });
 
 const emit = defineEmits([
-  "removeStop",
-  "update:trackedStopNum",
-  "update:trackedBusIndex",
+  "remove-stop",
+  "update:tracked-bus-num",
+  "update:tracked-stop-num",
+  "update:notifications-status",
 ]);
 
-const isCurrentlyTracked = computed(() => {
-  return props.trackedStopNum === props.stop.nr;
+const stopIsCurrentlyTracked = computed(() => {
+  return parseInt(props.trackedStopNum) === parseInt(props.stop.nr);
 });
 
-const updateTracking = (index) => {
-  if (isCurrentlyTracked.value && props.trackedBusIndex === index) {
-    emit("update:trackedStopNum", null);
-    emit("update:trackedBusIndex", null);
+const updateTracking = async (busNum, busIsCurrentlyTracked) => {
+  if (stopIsCurrentlyTracked.value && busIsCurrentlyTracked) {
+    emit("update:tracked-stop-num", null);
+    emit("update:tracked-bus-num", null);
+
+    if (props.fcmToken) {
+      try {
+        const response = await axios.post(
+          `${import.meta.env.VITE_API_URL}tracking-service/cancel-tracking`,
+          {
+            "fcm_token": props.fcmToken,
+            "tracking_info": {
+              "stop_number": props.stop.nr,
+              "bus_number": busNum,
+            }
+          }
+        );
+
+        if (response.status === 200) {
+          emit('update:notifications-status', 'ok');
+        } else {
+          emit('update:notifications-status', 'fail');
+        }
+      } catch (error) {
+        emit('update:notifications-status', 'fail');
+        throw error;
+      }
+    }
   } else {
-    emit("update:trackedStopNum", props.stop.nr);
-    emit("update:trackedBusIndex", index);
+    emit("update:tracked-stop-num", parseInt(props.stop.nr));
+    emit("update:tracked-bus-num", busNum);
+
+    if (props.fcmToken) {
+      try {
+        const response = await axios.post(
+          `${import.meta.env.VITE_API_URL}tracking-service/request-tracking`,
+          {
+            "fcm_token": props.fcmToken,
+            "tracking_info": {
+              "stop_number": props.stop.nr,
+              "bus_number": busNum,
+            }
+          }
+        );
+
+        if (response.status === 200) {
+          emit('update:notifications-status', 'ok');
+        } else {
+          emit('update:notifications-status', 'fail');
+        }
+      } catch (error) {
+        emit('update:notifications-status', 'fail');
+        throw error;
+      }
+    }
   }
 };
 </script>
@@ -36,25 +87,28 @@ const updateTracking = (index) => {
       </p>
       <i class="ph-x" @click="$emit('removeStop', stop.nr)"></i>
     </div>
-    <table>
+    <table v-if="stop.sd">
       <thead>
         <th>Linia</th>
         <th>Kierunek</th>
         <th>Odjazd</th>
       </thead>
       <tbody>
-        <tr v-for="(line, index) in stop.sd" :key="line.li"
-          :class="{ tracked: isCurrentlyTracked && index === trackedBusIndex }"
-          @click="updateTracking(index)">
+        <tr v-for="(line, index) in stop.sd" :key="index"
+          :class="{ tracked: stopIsCurrentlyTracked && parseInt(line.li) === props.trackedBusNum }"
+          @click="updateTracking(parseInt(line.li), parseInt(line.li) === props.trackedBusNum)">
           <td class="line">{{ line.li }}</td>
           <td class="destination">{{ line.di }}</td>
           <td class="departure" v-if="line.de" :class="{ 'move-animation': line.de === '>>' }">
             <span>{{ line.de }}</span>
           </td>
-          <td v-else>-</td>
+          <td class="departure" v-else>?</td>
         </tr>
       </tbody>
     </table>
+    <div class="no-buses" v-else>
+      <p>Brak autobusów</p>
+    </div>
   </div>
 </template>
 
@@ -64,6 +118,18 @@ const updateTracking = (index) => {
   padding: 1rem;
   border-radius: 0.375rem;
   margin: 0.5rem;
+
+  .no-buses {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 1rem;
+
+    p {
+      font-size: 1.2rem;
+      font-weight: 500;
+    }
+  }
 
   .header {
     display: grid;
