@@ -6,6 +6,7 @@ import axios from "axios";
 import { useDebounceFn, useThrottleFn, usePermission } from "@vueuse/core";
 import { getToken, onMessage } from "firebase/messaging";
 import messaging from '@/firebase.js';
+import { registerSW } from 'virtual:pwa-register'
 
 const state = reactive({
   stops: [],
@@ -169,7 +170,12 @@ onMounted(async () => {
 
   if (import.meta.env.PROD && state.serviceWorkerSupported && state.pushMessagingSupported) {
     try {
-      const currentToken = await getToken(messaging, { vapidKey: "BIfMAYaSmkalPqzNUQlRRhfIhqryMV79098ZzXjcdFBlAyxa1DSjzzvP_KkdHvf1V20U2DRo7eMQ-C6JmIx5UTg" });
+      const serviceWorkerRegistration = registerSW();
+
+      const currentToken = await getToken(messaging, {
+        vapidKey: "BIfMAYaSmkalPqzNUQlRRhfIhqryMV79098ZzXjcdFBlAyxa1DSjzzvP_KkdHvf1V20U2DRo7eMQ-C6JmIx5UTg",
+        serviceWorkerRegistration: serviceWorkerRegistration,
+      });
       if (currentToken) {
         state.notificationsState = 'success';
         state.fcmToken = currentToken;
