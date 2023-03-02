@@ -11,7 +11,7 @@ export default defineConfig({
     VitePWA({
       injectRegister: null,
       strategies: 'injectManifest',
-      filename: 'firebase-messaging-sw.js',
+      filename: '/timetable/firebase-messaging-sw.js',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
       manifest: {
         name: 'Rozkład jazdy',
@@ -30,9 +30,6 @@ export default defineConfig({
             type: 'image/png'
           }
         ]
-      },
-      devOptions: {
-        enabled: true,
       },
     }),
   ],
