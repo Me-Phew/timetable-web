@@ -188,8 +188,6 @@ onMounted(async () => {
       state.notificationsState = 'error';
     }
   }
-  loadActiveTrackingSession('e6tH1ClwITmCIJ3ftzq3dF:APA91bFEX8T_bIPgxZxtFuYVAwHc97AELrxBp5BKN2aOPRge9b6RXpsuzbIUL2YjoiFRVAUCAzSHYu_uUCn_NqBnnlQQ4EdLKDZuwh7suolgda7I0x5G42ZuvD1mpBGKsJ7Yg1R44ElO');
-
 });
 
 const getMinDiff = (startDate, endDate) => {
