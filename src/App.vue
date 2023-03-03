@@ -6,7 +6,7 @@ import axios from "axios";
 import { useDebounceFn, useThrottleFn, usePermission } from "@vueuse/core";
 import { getToken, onMessage } from "firebase/messaging";
 import messaging from '@/firebase.js';
-import { registerSW } from 'virtual:pwa-register'
+import { registerSW } from 'virtual:pwa-register';
 
 const state = reactive({
   stops: [],
@@ -170,25 +170,42 @@ onMounted(async () => {
 
   if (import.meta.env.PROD && state.serviceWorkerSupported && state.pushMessagingSupported) {
     try {
-      const serviceWorkerRegistration = registerSW();
-
-      const currentToken = await getToken(messaging, {
-        vapidKey: "BIfMAYaSmkalPqzNUQlRRhfIhqryMV79098ZzXjcdFBlAyxa1DSjzzvP_KkdHvf1V20U2DRo7eMQ-C6JmIx5UTg",
-        serviceWorkerRegistration: serviceWorkerRegistration,
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/timetable/firebase-messaging-sw.js', { scope: '/timetable/' });
       });
-      if (currentToken) {
-        state.notificationsState = 'success';
-        state.fcmToken = currentToken;
 
-        onMessage(messaging, () => {
-          refreshStops();
+      let serviceWorkerRegistration;
+
+      navigator.serviceWorker.ready.then(async (registration) => {
+        console.log(registration);
+        serviceWorkerRegistration = registration;
+
+        console.log(`${serviceWorkerRegistration} not passed`);
+
+        if (!(serviceWorkerRegistration instanceof ServiceWorkerRegistration)) {
+          throw new Error('Service worker was not registered');
+        }
+
+        console.log(`${serviceWorkerRegistration} passed`);
+
+        const currentToken = await getToken(messaging, {
+          vapidKey: "BIfMAYaSmkalPqzNUQlRRhfIhqryMV79098ZzXjcdFBlAyxa1DSjzzvP_KkdHvf1V20U2DRo7eMQ-C6JmIx5UTg",
+          serviceWorkerRegistration: serviceWorkerRegistration,
         });
+        if (currentToken) {
+          state.notificationsState = 'success';
+          state.fcmToken = currentToken;
 
-        await loadActiveTrackingSession(currentToken);
-      } else {
-        console.error('An error occurred while retrieving token.', 'The getToken function did not return a token');
-        state.notificationsState = 'error';
-      }
+          onMessage(messaging, () => {
+            refreshStops();
+          });
+
+          await loadActiveTrackingSession(currentToken);
+        } else {
+          console.error('An error occurred while retrieving token.', 'The getToken function did not return a token');
+          state.notificationsState = 'error';
+        }
+      });
     } catch (err) {
       console.error('An error occurred while retrieving token.', err);
       state.notificationsState = 'error';
