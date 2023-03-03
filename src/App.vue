@@ -6,7 +6,6 @@ import axios from "axios";
 import { useDebounceFn, useThrottleFn, usePermission } from "@vueuse/core";
 import { getToken, onMessage } from "firebase/messaging";
 import messaging from '@/firebase.js';
-import { registerSW } from 'virtual:pwa-register';
 
 const state = reactive({
   stops: [],
