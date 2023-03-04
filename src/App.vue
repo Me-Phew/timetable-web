@@ -23,7 +23,7 @@ const state = reactive({
   pushMessagingSupported: null,
   fetchError: false,
   fcmToken: null,
-  notificationsStatus: null,
+  notificationsStatus: 'ok',
 });
 
 const getStops = async () => {
@@ -167,29 +167,19 @@ onMounted(async () => {
 
   await loadStops();
 
-  if (import.meta.env.PROD && state.serviceWorkerSupported && state.pushMessagingSupported) {
+  if (state.serviceWorkerSupported && state.pushMessagingSupported) {
     try {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/timetable/firebase-messaging-sw.js', { scope: '/timetable/' });
-      });
-
-      let serviceWorkerRegistration;
-
       navigator.serviceWorker.ready.then(async (registration) => {
-        console.log(registration);
-        serviceWorkerRegistration = registration;
-
-        console.log(`${serviceWorkerRegistration} not passed`);
-
-        if (!(serviceWorkerRegistration instanceof ServiceWorkerRegistration)) {
+        if (!(registration instanceof ServiceWorkerRegistration)) {
+          console.log(`${registration} did not pass`);
           throw new Error('Service worker was not registered');
+        } else {
+          console.log(`${registration} passed`);
         }
-
-        console.log(`${serviceWorkerRegistration} passed`);
 
         const currentToken = await getToken(messaging, {
           vapidKey: "BIfMAYaSmkalPqzNUQlRRhfIhqryMV79098ZzXjcdFBlAyxa1DSjzzvP_KkdHvf1V20U2DRo7eMQ-C6JmIx5UTg",
-          serviceWorkerRegistration: serviceWorkerRegistration,
+          serviceWorkerRegistration: registration,
         });
         if (currentToken) {
           state.notificationsState = 'success';
@@ -325,7 +315,7 @@ watch(notificationsPermission, (newValue) => {
           trackedBusEta
         }}</span>&nbsp;<span v-if="trackedBusEta !== '>>'">MIN</span>
       </p>
-      <i class="ph-bell-ringing-light" v-if="state.notificationsStatus === 'ok'"></i>
+      <i class="ph-bell-ringing-light" v-if="state.notificationsStatus === 'ok' && trackedBusEta"></i>
       <i class="ph-bell-slash-light" v-else-if="trackedBusEta"></i>
     </div>
   </header>

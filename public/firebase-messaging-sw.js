@@ -23,8 +23,6 @@ const firebaseApp = initializeApp(firebaseConfig);
 const messaging = getMessaging(firebaseApp);
 
 onBackgroundMessage(messaging, (payload) => {
-  console.log('[firebase-messaging-sw.js] Received background message ', payload);
-
   const { eta, bus, stop } = payload.data;
 
   const notificationTitle = eta == '0' ? 'Bus is leaving NOW' : `ETA: ${eta} minutes`;
@@ -49,8 +47,6 @@ onBackgroundMessage(messaging, (payload) => {
 self.addEventListener('notificationclick', function (event) {
   const clickedNotification = event.notification;
   clickedNotification.close();
-  console.log(event);
-
 
   const urlToOpen = new URL('/timetable', self.location.origin).href;
 

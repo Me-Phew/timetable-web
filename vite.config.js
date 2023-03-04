@@ -9,7 +9,8 @@ export default defineConfig({
   plugins: [
     vue(),
     VitePWA({
-      injectRegister: null,
+      registerType: 'autoUpdate',
+      injectRegister: 'inline',
       strategies: 'injectManifest',
       filename: 'firebase-messaging-sw.js',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
@@ -30,6 +31,10 @@ export default defineConfig({
             type: 'image/png'
           }
         ]
+      },
+      devOptions: {
+        enabled: true,
+        type: "module",
       },
     }),
   ],
