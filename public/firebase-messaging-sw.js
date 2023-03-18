@@ -48,7 +48,7 @@ self.addEventListener('notificationclick', function (event) {
   const clickedNotification = event.notification;
   clickedNotification.close();
 
-  const urlToOpen = new URL('/timetable', self.location.origin).href;
+  const urlToOpen = new URL('/', self.location.origin).href;
 
   const promiseChain = clients.matchAll({
     type: 'window',
