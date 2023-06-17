@@ -8,4 +8,4 @@
 
 ## Features:
 - [x] Adding multiple bus stops
-- [x] Tracking buses ETA with notifications implemented using Firebase Cloud Messaging
+- [x] Tracking buses ETA with notifications implemented using [Firebase Cloud Messaging](https://firebase.google.com/docs/cloud-messaging)
